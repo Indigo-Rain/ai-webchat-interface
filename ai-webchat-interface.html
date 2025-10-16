@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        'user-blue': '#007AFF',
+                        'wechat-gray': '#F2F2F2',
+                        'wechat-text': '#1D1D1F',
+                        'wechat-time': '#86909C'
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.3s ease-out',
+                        'typing': 'typing 1.4s infinite both'
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' }
+                        },
+                        typing: {
+                            '0%, 100%': { opacity: '0.2' },
+                            '50%': { opacity: '1' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .scrollbar-hide {
+                scrollbar-width: none;
+                -ms-overflow-style: none;
+            }
+            .scrollbar-hide::-webkit-scrollbar {
+                display: none;
+            }
+            .message-bubble-left {
+                border-radius: 18px 18px 18px 4px;
+            }
+            .message-bubble-right {
+                border-radius: 18px 18px 4px 18px;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col overflow-hidden transition-colors duration-300 dark:bg-gray-900">
+    <!-- 主容器 -->
+    <div class="flex flex-col h-full">
+        <!-- 顶部导航栏 -->
+        <header class="bg-white shadow-sm z-10 transition-colors duration-300 dark:bg-gray-800">
+            <div class="flex items-center justify-between px-4 py-3">
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-4">
+                        <div class="w-10 h-10 rounded-full overflow-hidden bg-gray-400 flex items-center justify-center" id="chatAvatar">
+                            <i class="fa fa-bullseye text-white text-lg"></i>
+                        </div>
+                        <div>
+                            <h1 class="text-lg font-semibold text-wechat-text dark:text-white" id="chatTitle">智能聊天助手</h1>
+                            <p class="text-xs text-wechat-time dark:text-gray-400" id="onlineStatus">🟢 在线</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <button id="themeToggle" class="p-2 rounded-full hover:bg-gray-200 transition-colors dark:hover:bg-gray-700">
+                        <i class="fa fa-moon-o text-wechat-text dark:text-white dark:hidden"></i>
+                        <i class="fa fa-sun-o text-white hidden dark:inline"></i>
+                    </button>
+                    <button id="settingsBtn" class="p-2 rounded-full hover:bg-gray-200 transition-colors dark:hover:bg-gray-700">
+                        <i class="fa fa-cog text-wechat-text dark:text-white"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- 聊天区域 -->
+        <main class="flex-1 overflow-y-auto scrollbar-hide p-4 transition-colors duration-300 dark:bg-gray-900" id="chatContainer">
+            <div class="max-w-4xl mx-auto space-y-6" id="messageList">
+                <!-- 初始为空，没有欢迎消息和首句发言 -->
+            </div>
+        </main>
+
+        <!-- 输入区域 -->
+        <footer class="bg-white border-t border-gray-200 p-3 transition-colors duration-300 dark:bg-gray-800 dark:border-gray-700">
+            <div class="max-w-4xl mx-auto">
+                <div class="flex items-center space-x-2">
+                    <button id="emojiBtn" class="p-2 rounded-full hover:bg-gray-200 transition-colors dark:hover:bg-gray-700">
+                        <i class="fa fa-smile-o text-wechat-text dark:text-white"></i>
+                    </button>
+                    <div class="flex-1 relative">
+                        <textarea 
+                            id="messageInput" 
+                            placeholder="请输入消息..." 
+                            class="w-full px-4 py-2 bg-gray-100 rounded-full focus:outline-none focus:ring-2 focus:ring-user-blue/20 resize-none h-12 transition-colors duration-300 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
+                            rows="1"
+                        ></textarea>
+                    </div>
+                    <button id="sendBtn" class="w-10 h-10 rounded-full bg-user-blue text-white flex items-center justify-center hover:bg-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <i class="fa fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- 表情面板 -->
+    <div id="emojiPanel" class="fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-white rounded-2xl shadow-2xl w-[90%] max-w-md z-50 hidden transition-colors duration-300 dark:bg-gray-800">
+        <div class="p-4">
+            <div class="emoji-content h-auto max-h-48 overflow-y-auto scrollbar-hide" id="emojiContent">
+                <!-- 表情内容 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 设置面板 -->
+    <div id="settingsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 dark:bg-black/70">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto scrollbar-hide transition-colors duration-300 dark:bg-gray-800">
+            <div class="p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-semibold text-wechat-text dark:text-white">聊天设置</h2>
+                    <button id="closeSettings" class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                        <i class="fa fa-times text-wechat-text dark:text-white"></i>
+                    </button>
+                </div>
+
+                <div class="space-y-6">
+                    <!-- 聊天对象信息 -->
+                    <div>
+                        <h3 class="font-medium text-wechat-text mb-3 dark:text-white">聊天对象信息</h3>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1 dark:text-gray-400">AI名称</label>
+                                <input type="text" id="chatName" placeholder="智能聊天助手" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-user-blue/20 focus:border-user-blue transition-colors duration-300 dark:bg-gray-700 dark:text-white dark:border-gray-600">
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1 dark:text-gray-400">AI头像URL</label>
+                                <input type="text" id="chatAvatarUrl" placeholder="输入头像URL" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-user-blue/20 focus:border-user-blue transition-colors duration-300 dark:bg-gray-700 dark:text-white dark:border-gray-600">
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1 dark:text-gray-400">你的头像URL</label>
+                                <input type="text" id="userAvatarUrl" placeholder="输入你的头像URL" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-user-blue/20 focus:border-user-blue transition-colors duration-300 dark:bg-gray-700 dark:text-white dark:border-gray-600">
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1 dark:text-gray-400">AI人设描述 (Prompt)</label>
+                                <textarea id="aiPrompt" placeholder="请描述AI的性格、专业领域、回答风格等，用于AI微调" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-user-blue/20 focus:border-user-blue transition-colors duration-300 dark:bg-gray-700 dark:text-white dark:border-gray-600 resize-none"></textarea>
+                                <p class="text-xs text-gray-500 mt-1 dark:text-gray-400">这个描述将作为系统提示发送给AI，影响其回答风格和行为</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- API设置 -->
+                    <div>
+                        <h3 class="font-medium text-wechat-text mb-3 dark:text-white">API设置</h3>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1 dark:text-gray-400">API-KEY</label>
+                                <input type="password" id="apiKey" placeholder="sk-..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-user-blue/20 focus:border-user-blue transition-colors duration-300 dark:bg-gray-700 dark:text-white dark:border-gray-600">
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1 dark:text-gray-400">API基础地址</label>
+                                <input type="text" id="apiBaseUrl" placeholder="https://api.openai.com/v1" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-user-blue/20 focus:border-user-blue transition-colors duration-300 dark:bg-gray-700 dark:text-white dark:border-gray-600">
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1 dark:text-gray-400">模型型号</label>
+                                <input type="text" id="modelName" placeholder="gpt-3.5-turbo" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-user-blue/20 focus:border-user-blue transition-colors duration-300 dark:bg-gray-700 dark:text-white dark:border-gray-600">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 参数设置 -->
+                    <div>
+                        <h3 class="font-medium text-wechat-text mb-3 dark:text-white">对话参数</h3>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1 dark:text-gray-400">输出Token上限</label>
+                                <input type="number" id="maxTokens" placeholder="2048" min="100" max="4096" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-user-blue/20 focus:border-user-blue transition-colors duration-300 dark:bg-gray-700 dark:text-white dark:border-gray-600">
+                            </div>
+                            <div>
+                                <label class="block text-sm text-gray-600 mb-1 dark:text-gray-400">Temperature (0.0-2.0)</label>
+                                <input type="number" id="temperature" placeholder="0.7" step="0.1" min="0" max="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-user-blue/20 focus:border-user-blue transition-colors duration-300 dark:bg-gray-700 dark:text-white dark:border-gray-600">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 对话管理 -->
+                    <div>
+                        <h3 class="font-medium text-wechat-text mb-3 dark:text-white">对话管理</h3>
+                        <div class="space-y-3">
+                            <button id="resetConversation" class="w-full bg-red-500 text-white py-2 rounded-lg hover:bg-red-600 transition-colors font-medium">
+                                <i class="fa fa-trash mr-2"></i>重置对话历史
+                            </button>
+                            <button id="exportConversation" class="w-full bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 transition-colors font-medium">
+                                <i class="fa fa-download mr-2"></i>导出对话为JSON
+                            </button>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-2 dark:text-gray-400">
+                            <i class="fa fa-info-circle mr-1"></i>对话历史自动保存在本地，不会上传到服务器
+                        </p>
+                    </div>
+
+                    <!-- 保存按钮 -->
+                    <button id="saveSettings" class="w-full bg-user-blue text-white py-3 rounded-lg hover:bg-blue-500 transition-colors font-medium">
+                        保存设置
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 表情符号数据
+        const emojis = [
+            '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰',
+            '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜', '🤪', '😎', '🤓', '🧐', '😏', '😣', '😥', '😮',
+            '👋', '👍', '👎', '👌', '👊', '✊', '🤛', '🤜', '🤞', '✌️', '🤟', '🤘', '👈', '👉', '👆', '👇',
+            '🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🦝', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐽', '🐸',
+            '🍎', '🍐', '🍊', '🍋', '🍌', '🍉', '🍇', '🍓', '🍒', '🍑', '🥭', '🍍', '🥥', '🥝', '🍅', '🥑',
+            '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '🤎', '💔', '❣️', '💕', '💞', '💓', '💗', '💖'
+        ];
+
+        // 全局变量
+        let conversationHistory = [];
+        let isLoading = false;
+
+        // DOM元素
+        const emojiBtn = document.getElementById('emojiBtn');
+        const emojiPanel = document.getElementById('emojiPanel');
+        const emojiContent = document.getElementById('emojiContent');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const messageList = document.getElementById('messageList');
+        const settingsBtn = document.getElementById('settingsBtn');
+        const settingsModal = document.getElementById('settingsModal');
+        const closeSettings = document.getElementById('closeSettings');
+        const saveSettings = document.getElementById('saveSettings');
+        const themeToggle = document.getElementById('themeToggle');
+        const chatTitle = document.getElementById('chatTitle');
+        const chatAvatar = document.getElementById('chatAvatar');
+        const resetConversationBtn = document.getElementById('resetConversation');
+        const exportConversationBtn = document.getElementById('exportConversation');
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            renderEmojis();
+            loadSettings();
+            loadConversationHistory();
+            setupEventListeners();
+            updateSendButton();
+        });
+
+        // 渲染表情 - 修复留白问题
+        function renderEmojis() {
+            emojiContent.innerHTML = '';
+            
+            // 创建表情容器，使用grid布局避免留白
+            const emojiGrid = document.createElement('div');
+            emojiGrid.className = 'grid grid-cols-8 gap-2';
+            
+            emojis.forEach(emoji => {
+                const emojiBtn = document.createElement('button');
+                emojiBtn.textContent = emoji;
+                emojiBtn.className = 'w-10 h-10 flex items-center justify-center rounded-full hover:bg-gray-200 transition-colors text-xl dark:hover:bg-gray-700';
+                emojiBtn.style.minWidth = '40px';
+                emojiBtn.style.minHeight = '40px';
+                emojiBtn.onclick = () => insertEmoji(emoji);
+                emojiGrid.appendChild(emojiBtn);
+            });
+            
+            emojiContent.appendChild(emojiGrid);
+        }
+
+        // 插入表情
+        function insertEmoji(emoji) {
+            const cursorPos = messageInput.selectionStart;
+            const text = messageInput.value;
+            const newText = text.substring(0, cursorPos) + emoji + text.substring(cursorPos);
+            messageInput.value = newText;
+            messageInput.focus();
+            messageInput.selectionStart = messageInput.selectionEnd = cursorPos + emoji.length;
+            updateSendButton();
+            emojiPanel.classList.add('hidden');
+        }
+
+        // 设置事件监听器
+        function setupEventListeners() {
+            // 表情按钮
+            emojiBtn.addEventListener('click', () => {
+                emojiPanel.classList.toggle('hidden');
+            });
+
+            // 点击其他地方关闭表情面板
+            document.addEventListener('click', (e) => {
+                if (!emojiBtn.contains(e.target) && !emojiPanel.contains(e.target)) {
+                    emojiPanel.classList.add('hidden');
+                }
+            });
+
+            // 输入框变化
+            messageInput.addEventListener('input', updateSendButton);
+            messageInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+
+            // 发送按钮
+            sendBtn.addEventListener('click', sendMessage);
+
+            // 设置按钮
+            settingsBtn.addEventListener('click', () => {
+                settingsModal.classList.remove('hidden');
+            });
+
+            // 关闭设置
+            closeSettings.addEventListener('click', () => {
+                settingsModal.classList.add('hidden');
+            });
+
+            // 点击背景关闭设置
+            settingsModal.addEventListener('click', (e) => {
+                if (e.target === settingsModal) {
+                    settingsModal.classList.add('hidden');
+                }
+            });
+
+            // 保存设置
+            saveSettings.addEventListener('click', saveSettingsToLocal);
+
+            // 主题切换
+            themeToggle.addEventListener('click', toggleTheme);
+
+            // 重置对话
+            resetConversationBtn.addEventListener('click', resetConversation);
+
+            // 导出对话
+            exportConversationBtn.addEventListener('click', exportConversation);
+        }
+
+        // 更新发送按钮状态
+        function updateSendButton() {
+            sendBtn.disabled = messageInput.value.trim() === '' || isLoading;
+        }
+
+        // 添加消息到聊天界面
+        function addMessage(content, isUser = false, timestamp = new Date()) {
+            const messageDiv = document.createElement('div');
+            // 大幅增加间距到space-x-8，并为用户消息添加额外的右边距
+            messageDiv.className = `flex items-start animate-fade-in ${isUser ? 'justify-end space-x-8' : 'space-x-6'}`;
+            
+            const avatarClass = isUser ? 'order-2 ml-4' : 'order-1';
+            const bubbleClass = isUser ? 'order-1 bg-user-blue text-white message-bubble-right pr-6' : 'order-2 bg-white message-bubble-left shadow-sm dark:bg-gray-700 dark:text-white';
+            
+            const avatar = document.createElement('div');
+            avatar.className = `w-8 h-8 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 mt-1 ${avatarClass}`;
+
+            // 调整用户头像左边距为20px
+            if (isUser) {
+                avatar.style.marginLeft = '20px';
+            }
+            
+            const settings = getSettings();
+            if (isUser && settings.userAvatarUrl) {
+                avatar.style.backgroundImage = `url(${settings.userAvatarUrl})`;
+                avatar.style.backgroundSize = 'cover';
+                avatar.style.backgroundPosition = 'center';
+                avatar.innerHTML = '';
+            } else if (!isUser && settings.chatAvatarUrl) {
+                avatar.style.backgroundImage = `url(${settings.chatAvatarUrl})`;
+                avatar.style.backgroundSize = 'cover';
+                avatar.style.backgroundPosition = 'center';
+                avatar.innerHTML = '';
+            } else {
+                avatar.style.backgroundColor = isUser ? '#007AFF' : '#8E8E93';
+                avatar.innerHTML = '<i class="fa fa-bullseye text-white text-sm"></i>';
+            }
+            
+            const bubble = document.createElement('div');
+            bubble.className = `${bubbleClass} rounded-lg px-4 py-3 max-w-[75%]`;
+            
+            const contentP = document.createElement('p');
+            contentP.className = 'leading-relaxed break-words';
+            contentP.textContent = content;
+            
+            const timeDiv = document.createElement('div');
+            timeDiv.className = 'text-xs mt-1 flex items-center justify-end';
+            
+            if (isUser) {
+                timeDiv.innerHTML = `<span>${timestamp.toLocaleTimeString('zh-CN', { hour12: false })}</span>
+                                    <i class="fa fa-check-circle ml-1 text-white/70"></i>`;
+            } else {
+                timeDiv.innerHTML = `<span class="text-wechat-time dark:text-gray-400">${timestamp.toLocaleTimeString('zh-CN', { hour12: false })}</span>`;
+            }
+            
+            bubble.appendChild(contentP);
+            bubble.appendChild(timeDiv);
+            messageDiv.appendChild(avatar);
+            messageDiv.appendChild(bubble);
+            
+            messageList.appendChild(messageDiv);
+            scrollToBottom();
+            
+            return { messageDiv, bubble };
+        }
+
+        // 添加"发送中"动画
+        function addTypingIndicator() {
+            const typingDiv = document.createElement('div');
+            typingDiv.className = 'flex items-start space-x-6 animate-fade-in';
+            typingDiv.id = 'typingIndicator';
+            
+            const avatar = document.createElement('div');
+            avatar.className = 'w-8 h-8 rounded-full overflow-hidden bg-gray-400 flex items-center justify-center flex-shrink-0 mt-1';
+            
+            const settings = getSettings();
+            if (settings.chatAvatarUrl) {
+                avatar.style.backgroundImage = `url(${settings.chatAvatarUrl})`;
+                avatar.style.backgroundSize = 'cover';
+                avatar.style.backgroundPosition = 'center';
+                avatar.innerHTML = '';
+            } else {
+                avatar.innerHTML = '<i class="fa fa-bullseye text-white text-sm"></i>';
+            }
+            
+            const bubble = document.createElement('div');
+            bubble.className = 'bg-white rounded-lg px-4 py-3 message-bubble-left shadow-sm dark:bg-gray-700';
+            
+            const typingIndicator = document.createElement('div');
+            typingIndicator.className = 'flex space-x-1';
+            
+            for (let i = 0; i < 3; i++) {
+                const dot = document.createElement('div');
+                dot.className = 'w-2 h-2 bg-gray-400 rounded-full animate-typing';
+                dot.style.animationDelay = `${i * 0.2}s`;
+                typingIndicator.appendChild(dot);
+            }
+            
+            bubble.appendChild(typingIndicator);
+            typingDiv.appendChild(avatar);
+            typingDiv.appendChild(bubble);
+            
+            messageList.appendChild(typingDiv);
+            scrollToBottom();
+            
+            return typingDiv;
+        }
+
+        // 移除"发送中"动画
+        function removeTypingIndicator() {
+            const typingIndicator = document.getElementById('typingIndicator');
+            if (typingIndicator) {
+                typingIndicator.remove();
+            }
+        }
+
+        // 构建API请求
+        function buildApiRequest(userMessage) {
+            const settings = getSettings();
+            
+            // 验证API设置
+            if (!settings.apiKey) {
+                throw new Error('请先在设置中配置API-KEY');
+            }
+            
+            if (!settings.apiBaseUrl) {
+                throw new Error('请先在设置中配置API基础地址');
+            }
+            
+            // 构建消息数组
+            const messages = [];
+            
+            // 添加系统提示（AI人设描述）
+            if (settings.aiPrompt) {
+                messages.push({
+                    role: 'system',
+                    content: settings.aiPrompt
+                });
+            }
+            
+            // 添加历史对话
+            messages.push(...conversationHistory);
+            
+            // 添加当前用户消息
+            messages.push({
+                role: 'user',
+                content: userMessage
+            });
+            
+            return {
+                model: settings.modelName || 'gpt-3.5-turbo',
+                messages: messages,
+                max_tokens: parseInt(settings.maxTokens) || 2048,
+                temperature: parseFloat(settings.temperature) || 0.7,
+                top_p: 1,
+                frequency_penalty: 0,
+                presence_penalty: 0
+            };
+        }
+
+        // 调用AI API
+        async function callAIApi(userMessage) {
+            const settings = getSettings();
+            
+            try {
+                const requestData = buildApiRequest(userMessage);
+                const apiUrl = `${settings.apiBaseUrl}/chat/completions`;
+                
+                console.log('API请求:', {
+                    url: apiUrl,
+                    model: requestData.model,
+                    messages: requestData.messages.length,
+                    max_tokens: requestData.max_tokens,
+                    temperature: requestData.temperature
+                });
+                
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${settings.apiKey}`
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    console.error('API响应错误:', data);
+                    throw new Error(data.error?.message || `API请求失败: ${response.status}`);
+                }
+                
+                console.log('API响应成功:', data);
+                return data.choices[0].message.content;
+                
+            } catch (error) {
+                console.error('API调用失败:', error);
+                throw error;
+            }
+        }
+
+        // 发送消息
+        async function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message || isLoading) return;
+            
+            try {
+                isLoading = true;
+                updateSendButton();
+                
+                // 添加用户消息到界面
+                const timestamp = new Date();
+                addMessage(message, true, timestamp);
+                messageInput.value = '';
+                
+                // 添加用户消息到历史记录
+                conversationHistory.push({ 
+                    role: 'user', 
+                    content: message,
+                    timestamp: timestamp.toISOString()
+                });
+                
+                // 保存对话历史
+                saveConversationHistory();
+                
+                // 添加"发送中"动画
+                addTypingIndicator();
+                
+                try {
+                    // 调用真实AI API
+                    const reply = await callAIApi(message);
+                    
+                    // 移除"发送中"动画
+                    removeTypingIndicator();
+                    
+                    // 添加回复消息到界面
+                    const replyTimestamp = new Date();
+                    addMessage(reply, false, replyTimestamp);
+                    
+                    // 添加回复消息到历史记录
+                    conversationHistory.push({ 
+                        role: 'assistant', 
+                        content: reply,
+                        timestamp: replyTimestamp.toISOString()
+                    });
+                    
+                    // 保存对话历史
+                    saveConversationHistory();
+                    
+                } catch (error) {
+                    // 移除"发送中"动画
+                    removeTypingIndicator();
+                    
+                    // 显示错误消息
+                    const errorTimestamp = new Date();
+                    addMessage(`❌ ${error.message}`, false, errorTimestamp);
+                    
+                    // 添加错误消息到历史记录
+                    conversationHistory.push({ 
+                        role: 'error', 
+                        content: error.message,
+                        timestamp: errorTimestamp.toISOString()
+                    });
+                    
+                    // 保存对话历史
+                    saveConversationHistory();
+                }
+                
+            } finally {
+                isLoading = false;
+                updateSendButton();
+            }
+        }
+
+        // 滚动到底部
+        function scrollToBottom() {
+            const chatContainer = document.getElementById('chatContainer');
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // 设置管理
+        function getSettings() {
+            const defaultSettings = {
+                chatName: '智能聊天助手',
+                chatAvatarUrl: '',
+                userAvatarUrl: '',
+                aiPrompt: '',
+                apiKey: '',
+                apiBaseUrl: 'https://api.openai.com/v1',
+                modelName: 'gpt-3.5-turbo',
+                maxTokens: '2048',
+                temperature: '0.7',
+                contextWindow: '10',
+                theme: 'light'
+            };
+            
+            const saved = localStorage.getItem('chatSettings');
+            return saved ? { ...defaultSettings, ...JSON.parse(saved) } : defaultSettings;
+        }
+
+        function saveSettingsToLocal() {
+            const settings = {
+                chatName: document.getElementById('chatName').value || '智能聊天助手',
+                chatAvatarUrl: document.getElementById('chatAvatarUrl').value || '',
+                userAvatarUrl: document.getElementById('userAvatarUrl').value || '',
+                aiPrompt: document.getElementById('aiPrompt').value || '',
+                apiKey: document.getElementById('apiKey').value || '',
+                apiBaseUrl: document.getElementById('apiBaseUrl').value || 'https://api.openai.com/v1',
+                modelName: document.getElementById('modelName').value || 'gpt-3.5-turbo',
+                maxTokens: document.getElementById('maxTokens').value || '2048',
+                temperature: document.getElementById('temperature').value || '0.7',
+                contextWindow: document.getElementById('contextWindow')?.value || '10',
+                theme: getSettings().theme
+            };
+            
+            localStorage.setItem('chatSettings', JSON.stringify(settings));
+            
+            // 更新界面
+            chatTitle.textContent = settings.chatName;
+            if (settings.chatAvatarUrl) {
+                chatAvatar.style.backgroundImage = `url(${settings.chatAvatarUrl})`;
+                chatAvatar.style.backgroundSize = 'cover';
+                chatAvatar.style.backgroundPosition = 'center';
+                chatAvatar.innerHTML = '';
+            }
+            
+            // 显示保存成功提示
+            const originalText = saveSettings.textContent;
+            saveSettings.textContent = '保存成功！';
+            saveSettings.classList.add('bg-green-500');
+            
+            setTimeout(() => {
+                saveSettings.textContent = originalText;
+                saveSettings.classList.remove('bg-green-500');
+                settingsModal.classList.add('hidden');
+            }, 1500);
+        }
+
+        function loadSettings() {
+            const settings = getSettings();
+            
+            document.getElementById('chatName').value = settings.chatName || '智能聊天助手';
+            document.getElementById('chatAvatarUrl').value = settings.chatAvatarUrl || '';
+            document.getElementById('userAvatarUrl').value = settings.userAvatarUrl || '';
+            document.getElementById('aiPrompt').value = settings.aiPrompt || '';
+            document.getElementById('apiKey').value = settings.apiKey || '';
+            document.getElementById('apiBaseUrl').value = settings.apiBaseUrl || 'https://api.openai.com/v1';
+            document.getElementById('modelName').value = settings.modelName || 'gpt-3.5-turbo';
+            document.getElementById('maxTokens').value = settings.maxTokens || '2048';
+            document.getElementById('temperature').value = settings.temperature || '0.7';
+            
+            // 更新界面
+            chatTitle.textContent = settings.chatName;
+            if (settings.chatAvatarUrl) {
+                chatAvatar.style.backgroundImage = `url(${settings.chatAvatarUrl})`;
+                chatAvatar.style.backgroundSize = 'cover';
+                chatAvatar.style.backgroundPosition = 'center';
+                chatAvatar.innerHTML = '';
+            }
+            
+            // 加载主题
+            if (settings.theme === 'dark') {
+                document.documentElement.classList.add('dark');
+            }
+        }
+
+        // 主题切换
+        function toggleTheme() {
+            const isDark = document.documentElement.classList.toggle('dark');
+            const settings = getSettings();
+            settings.theme = isDark ? 'dark' : 'light';
+            localStorage.setItem('chatSettings', JSON.stringify(settings));
+        }
+
+        // 对话历史管理
+        function saveConversationHistory() {
+            localStorage.setItem('conversationHistory', JSON.stringify(conversationHistory));
+        }
+
+        function loadConversationHistory() {
+            const savedHistory = localStorage.getItem('conversationHistory');
+            if (savedHistory) {
+                conversationHistory = JSON.parse(savedHistory);
+                // 重新渲染对话历史
+                renderConversationHistory();
+            }
+        }
+
+        function renderConversationHistory() {
+            messageList.innerHTML = '';
+            conversationHistory.forEach(msg => {
+                const timestamp = new Date(msg.timestamp);
+                addMessage(msg.content, msg.role === 'user', timestamp);
+            });
+        }
+
+        // 重置对话历史
+        function resetConversation() {
+            if (confirm('确定要清空所有对话历史吗？此操作不可撤销！')) {
+                conversationHistory = [];
+                localStorage.removeItem('conversationHistory');
+                messageList.innerHTML = '';
+                
+                // 显示成功提示
+                const originalText = resetConversationBtn.textContent;
+                resetConversationBtn.textContent = '✅ 对话已重置';
+                resetConversationBtn.classList.remove('bg-red-500', 'hover:bg-red-600');
+                resetConversationBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+                
+                setTimeout(() => {
+                    resetConversationBtn.innerHTML = '<i class="fa fa-trash mr-2"></i>重置对话历史';
+                    resetConversationBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
+                    resetConversationBtn.classList.add('bg-red-500', 'hover:bg-red-600');
+                }, 2000);
+            }
+        }
+
+        // 导出对话为JSON
+        function exportConversation() {
+            if (conversationHistory.length === 0) {
+                alert('没有对话历史可导出');
+                return;
+            }
+            
+            // 创建导出数据
+            const exportData = {
+                conversation: conversationHistory,
+                exportDate: new Date().toISOString(),
+                chatSettings: {
+                    chatName: getSettings().chatName,
+                    aiPrompt: getSettings().aiPrompt
+                }
+            };
+            
+            // 创建JSON文件
+            const jsonString = JSON.stringify(exportData, null, 2);
+            const blob = new Blob([jsonString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            // 创建下载链接
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `chat_conversation_${new Date().toISOString().slice(0, 10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            
+            // 清理
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            // 显示成功提示
+            const originalText = exportConversationBtn.textContent;
+            exportConversationBtn.textContent = '✅ 导出成功';
+            exportConversationBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
+            exportConversationBtn.classList.add('bg-blue-500', 'hover:bg-blue-600');
+            
+            setTimeout(() => {
+                exportConversationBtn.innerHTML = '<i class="fa fa-download mr-2"></i>导出对话为JSON';
+                exportConversationBtn.classList.remove('bg-blue-500', 'hover:bg-blue-600');
+                exportConversationBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+            }, 2000);
+        }
+
+        // 定期保存对话历史
+        setInterval(() => {
+            if (conversationHistory.length > 0) {
+                saveConversationHistory();
+            }
+        }, 30000);
+
+        // 页面离开时保存
+        window.addEventListener('beforeunload', () => {
+            saveConversationHistory();
+        });
+    </script>
+</body>
+</html>
